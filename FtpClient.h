@@ -1,6 +1,7 @@
 class FtpClient
 {
 private:
+	sockaddr svAddr; // Dia chi server.
 	int sockCmd; // Socket duong lenh.
 	sockaddr cmdAddr; // Dia chi cua socket duong lenh.
 	int sockData; // Socket duong du lieu.	
@@ -72,7 +73,7 @@ private:
 	// Thoat khoi server
 	void quit();
 public:
-	// Tao mot ftpclient moi ket noi den ftp server. Tham so la dia chi IP cua ftp server.
+	// Tao mot ftpclient moi. Tham so la dia chi IP cua ftp server.
 	FtpClient(const string&);
 	
 	// Chay client.
