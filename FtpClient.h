@@ -1,9 +1,22 @@
+#pragma once
+
+#include "resource.h"
+#ifndef _MAX_REPLY_LENGTH
+#define _MAX_REPLY_LENGTH 100
+#endif
+#ifndef _NOT_CONNECTED
+#define _NOT_CONNECTED -1
+#endif
+#ifndef _INVALID_IP_ADDRESS
+#define _INVALID_IP_ADDRESS -2
+#endif
+using namespace std;
 class FtpClient
 {
 private:
-	sockaddr svAddr; // Dia chi server.
+	sockaddr_in svAddr; // Dia chi server.
 	int sockCmd; // Socket duong lenh.
-	sockaddr cmdAddr; // Dia chi cua socket duong lenh.
+	sockaddr_in cmdAddr; // Dia chi cua socket duong lenh.
 	int sockData; // Socket duong du lieu.	
 	bool isPassive;
 	string dir;
@@ -13,8 +26,12 @@ private:
 	// lenh la lenh can gui toi server.
 	// Tham so la tham so cua lenh do.
 	// Gia tri tra ve: true neu gui den server thanh cong, nguoc lai false.
-	// Reply tu server duoc xu ly ngay trong ham send<lenh>.
 	// Vi du: bool sendUser(const string &) const dung de gui username den server.
+	// Reply tu server duoc xu ly ngay sau khi goi ham send<lenh>.	
+
+	bool sendUser(const string &) const;
+	bool sendPass(const string &) const;
+
 
 	// Nhan reply tu server, xuat reply ra man hinh. Tra ve reply.
 	int recvReply() const;	
@@ -23,10 +40,10 @@ private:
 	bool initialize() const; 
 
 	// Ket noi den server. Tra ve true neu thanh cong, nguoc lai false.
-	bool connectToServer(const string &);	
+	bool connectToServer();	
 
 	// Dang nhap den server, username va password do nguoi dung nhap. Tra ve true neu thanh cong, nguoc lai false.
-	bool loginToServer();
+	bool loginToServer() const;
 
 	// Khoi tao sockData theo che do active.
 	void activeMode();
