@@ -1,14 +1,20 @@
 #pragma once
 
 #include "resource.h"
-#ifndef _MAX_REPLY_LENGTH
-#define _MAX_REPLY_LENGTH 100
+#ifndef MAX_REPLY_LENGTH
+#define MAX_REPLY_LENGTH 100
 #endif
-#ifndef _NOT_CONNECTED
-#define _NOT_CONNECTED -1
+#ifndef CONNECTION_CLOSED
+#define CONNECTION_CLOSED -1
 #endif
-#ifndef _INVALID_IP_ADDRESS
-#define _INVALID_IP_ADDRESS -2
+#ifndef UNABLE_TO_CREATE_SOCKET
+#define UNABLE_TO_CREATE_SOCKET -3
+#endif
+#ifndef MAX_PENDING_CONNECTION
+#define MAX_PENDING_CONNECTION 5
+#endif
+#ifndef MAX_BUFFER_SIZE
+#define MAX_BUFFER_SIZE (1 << 20)
 #endif
 using namespace std;
 class FtpClient
@@ -17,27 +23,22 @@ private:
 	sockaddr_in svAddr; // Dia chi server.
 	int sockCmd; // Socket duong lenh.
 	sockaddr_in cmdAddr; // Dia chi cua socket duong lenh.
-	int sockData; // Socket duong du lieu.	
+	int sockData; // Socket duong du lieu.		
 	bool isPassive;
-	string dir;
-private:
-	// Voi moi lenh can thiet de gui den server, viet mot ham voi cu phap bool send<lenh>(const string &) const
-	// Trong do:
-	// lenh la lenh can gui toi server.
-	// Tham so la tham so cua lenh do.
-	// Gia tri tra ve: true neu gui den server thanh cong, nguoc lai false.
-	// Vi du: bool sendUser(const string &) const dung de gui username den server.
-	// Reply tu server duoc xu ly ngay sau khi goi ham send<lenh>.	
-
-	bool sendUser(const string &) const;
-	bool sendPass(const string &) const;
-
+	string localDir;
+private:		
+	// VIET MOT HAM sendCmd DUY NHAT CHO TAT CAC CAC LENH
+	// Vi du muon gui lenh USER thi sendCmd("USER balbalbal")
+	void sendCmd(const string &) const;
 
 	// Nhan reply tu server, xuat reply ra man hinh. Tra ve reply.
-	int recvReply() const;	
+	int recvReply() const;		
 
-	// Khoi tao winsock. Tra ve true neu thanh cong, nguoc lai false.
-	bool initialize() const; 
+	// Nhan du lieu tu server.
+	string recvData() const;
+
+	// Khoi tao winsock.
+	void initialize() const; 
 
 	// Ket noi den server. Tra ve true neu thanh cong, nguoc lai false.
 	bool connectToServer();	
@@ -52,7 +53,10 @@ private:
 	void passiveMode();
 
 	// Liet ke cac thu muc, tap tin trong thu muc hien hanh.
-	void list();
+	void list(const string &);
+
+	// Lenh dir.
+	void dir(const string &);
 
 	// Upload file len server. Tham so la duong dan den file.
 	void put(const string &);
