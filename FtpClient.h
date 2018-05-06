@@ -2,7 +2,7 @@
 
 #include "resource.h"
 #ifndef MAX_REPLY_LENGTH
-#define MAX_REPLY_LENGTH 100
+#define MAX_REPLY_LENGTH 10000
 #endif
 #ifndef CONNECTION_CLOSED
 #define CONNECTION_CLOSED -1
@@ -16,6 +16,18 @@
 #ifndef MAX_BUFFER_SIZE
 #define MAX_BUFFER_SIZE (1 << 20)
 #endif
+#ifndef PASSIVE_REPLY_NOT_FOUND
+#define PASSIVE_REPLY_NOT_FOUND -2
+#endif
+#ifndef DIR_ERROR
+#define DIR_ERROR -4
+#endif
+#ifndef INVALID_PARAMETER
+#define INVALID_PARAMETER -5
+#endif
+#ifndef FILE_NOT_EXISTS
+#define FILE_NOT_EXISTS -6
+#endif
 using namespace std;
 class FtpClient
 {
@@ -26,16 +38,17 @@ private:
 	int sockData; // Socket duong du lieu.		
 	bool isPassive;
 	string localDir;
+	string lastReply; // Luu lai reply cuoi cung nhan duoc tu server.
 private:		
 	// VIET MOT HAM sendCmd DUY NHAT CHO TAT CAC CAC LENH
 	// Vi du muon gui lenh USER thi sendCmd("USER balbalbal")
 	void sendCmd(const string &) const;
 
 	// Nhan reply tu server, xuat reply ra man hinh. Tra ve reply.
-	int recvReply() const;		
+	int recvReply();
 
 	// Nhan du lieu tu server.
-	string recvData() const;
+	string recvData() const;	
 
 	// Khoi tao winsock.
 	void initialize() const; 
@@ -44,7 +57,7 @@ private:
 	bool connectToServer();	
 
 	// Dang nhap den server, username va password do nguoi dung nhap. Tra ve true neu thanh cong, nguoc lai false.
-	bool loginToServer() const;
+	bool loginToServer();
 
 	// Khoi tao sockData theo che do active.
 	void activeMode();
@@ -91,8 +104,31 @@ private:
 	// Chuyen sang trang thai passive.
 	void enterPassiveMode();
 
+	// Lay dia chi port trong reply 227.
+	sockaddr_in getAddrFromPasvReply() const;
+
 	// Thoat khoi server
 	void quit();
+
+	// Mo duong truyen du lieu.
+	void openDataChannel();
+
+	// Dong ket noi data socket.
+	void closeDataChannel() const;
+
+	// Ham nhan du lieu tu server va xuat ra output stream.
+	void recvData(ofstream &) const;
+
+	// Ham lay ten file tu duong dan.
+	static string getFileNameFromPath(const string &);
+
+	// Ham gui du lieu den server.
+	void sendData(ifstream &) const;
+
+	// Don dep tai nguyen.
+	void cleanUp();
+
+	static bool checkReply(const string &);
 public:
 	// Tao mot ftpclient moi. Tham so la dia chi IP cua ftp server.
 	FtpClient(const string&);
