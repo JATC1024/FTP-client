@@ -31,10 +31,9 @@ int main()
 		{
 			// TODO: code your application's behavior here.
 			try
-			{
+			{				
 				FtpClient client("192.168.24.2");
-				client.startClient();
-				_getch();
+				client.startClient();				
 			}			
 			catch (int e)
 			{
@@ -192,15 +191,20 @@ void FtpClient::activeMode()
 int FtpClient::recvReply()
 {
 	char * buffer = new char[MAX_REPLY_LENGTH];
-	int length = recv(sockCmd, buffer, MAX_REPLY_LENGTH, 0);
-	if (length == 0)
-		throw CONNECTION_CLOSED;
-	if (length == SOCKET_ERROR)
-		throw SOCKET_ERROR;
-	buffer[length] = '\0';
-	cout << buffer;
-	lastReply = string(buffer, buffer + length);
-	return stoi(string(buffer, buffer + 3));
+	lastReply = "";	
+	do
+	{
+		int length = recv(sockCmd, buffer, MAX_REPLY_LENGTH, 0);		
+		if (length == 0)
+			throw CONNECTION_CLOSED;
+		if (length == SOCKET_ERROR)
+			throw SOCKET_ERROR;
+		buffer[length] = '\0';
+		cout << buffer;
+		lastReply += string(buffer, buffer + length);
+	} while (checkReply(lastReply) == false); // DOc den khi nhan du reply.
+	delete[] buffer;
+	return stoi(string(lastReply.begin(), lastReply.begin() + 3));
 }
 
 void FtpClient::startClient()
@@ -211,12 +215,35 @@ void FtpClient::startClient()
 		cout << "Ftp client connectToServer failed\n";
 		return;
 	}
-	if (this->loginToServer() == false)	
-		return;	
-	//this->enterPassiveMode();
-	this->dir("Hao");	
-	this->get("Hao/pic.png");	
-	this->put("C:/hahaha.txt");
+	this->loginToServer();		
+	do
+	{		
+		string userInput, cmd, parameter;
+		stringstream ss;		
+		do
+		{
+			getline(cin, userInput);
+		} while (userInput.empty());
+		ss << userInput;
+		ss >> cmd;
+		ss >> parameter;
+		if (cmd == "dir")
+			this->dir(parameter);
+		else if (cmd == "get")
+			this->get(parameter);
+		else if (cmd == "put")
+			this->put(parameter);
+		else if (cmd == "passive")
+			this->enterPassiveMode();
+		else if (cmd == "quit" || cmd == "exit")
+			break;
+		else
+		{
+			//cout << "Unvalid command\n";
+			cout << cmd << "haha\n";
+		}			
+	} while (true);		
+	cleanUp();
 }
 
 /// <summary>
@@ -298,7 +325,10 @@ void FtpClient::passiveMode()
 /// </summary>
 void FtpClient::closeDataChannel() const
 {
-	shutdown(sockData, SD_BOTH);
+	if (shutdown(sockData, SD_BOTH) == SOCKET_ERROR)
+		throw SOCKET_ERROR;
+	if (closesocket(sockData) == SOCKET_ERROR)
+		throw SOCKET_ERROR;
 }
 
 /// <summary>
@@ -457,4 +487,33 @@ void FtpClient::sendData(ifstream & is) const
 		}
 	}
 	delete[] buffer;
+}
+
+/// <summary>
+/// Don dep tai nguyen
+/// </summary>
+void FtpClient::cleanUp()
+{
+	if (shutdown(sockCmd, SD_BOTH) == SOCKET_ERROR)
+		throw SOCKET_ERROR;
+	if (closesocket(sockCmd) == SOCKET_ERROR)
+		throw SOCKET_ERROR;
+	if (WSACleanup() == SOCKET_ERROR)
+		throw SOCKET_ERROR;
+}
+
+/// <summary>
+/// Ham kiem tra mot reply da duoc nhan du chua
+/// </summary>
+/// <param name = "reply"> Reply can kiem tra </param>
+/// <returns> True neu reply da nhan du, nguoc lai false </returns>
+bool FtpClient::checkReply(const string & reply)
+{
+	if (reply[3] != '-') // Reply mot dong.
+		return true;
+	// Reply nhieu dong.
+	for (int i = 0; i + 4 < (int)reply.size(); i++)
+		if (string(reply.begin() + i, reply.begin() + i + 4) == string(reply.begin(), reply.begin() + 3) + ' ')
+			return true;
+	return false;
 }
