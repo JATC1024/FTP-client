@@ -94,7 +94,9 @@ void FtpClient::initialize() const
 	wVersionRequested = MAKEWORD(2, 2); // Version 2.2 https://msdn.microsoft.com/en-us/library/windows/desktop/ms742213(v=vs.85).aspx.
 	int err = WSAStartup(wVersionRequested, &wsaData);
 	if (err)
-		throw err;	
+		throw err;
+	if (CreateDirectory(localDir.c_str(), NULL) == false && GetLastError() != ERROR_ALREADY_EXISTS)
+		throw DIR_ERROR;
 }
 
 /// <summary>
@@ -121,7 +123,7 @@ bool FtpClient::connectToServer()
 /// Ham dang nhap vao ftp server.
 /// </summary>
 /// <returns> True neu dang nhap thanh cong, nguoc lai false </returns>
-bool FtpClient::loginToServer() const
+bool FtpClient::loginToServer()
 {
 	string userName, passWord;
 	cout << "Enter username: ";
@@ -179,6 +181,7 @@ void FtpClient::activeMode()
 		if (sockData == INVALID_SOCKET)
 			throw INVALID_SOCKET;
 	} while (service.sin_port != htons(20)); // Accept den khi gap port 20.
+	closesocket(listenSocket); // Khong can listen socket nua.
 }
 
 /// <summary>
@@ -186,7 +189,7 @@ void FtpClient::activeMode()
 /// Neu duong lenh khong con ket noi thi throw exception.
 /// </summary>
 /// <returns> Reply cua server </returns>
-int FtpClient::recvReply() const
+int FtpClient::recvReply()
 {
 	char * buffer = new char[MAX_REPLY_LENGTH];
 	int length = recv(sockCmd, buffer, MAX_REPLY_LENGTH, 0);
@@ -196,6 +199,7 @@ int FtpClient::recvReply() const
 		throw SOCKET_ERROR;
 	buffer[length] = '\0';
 	cout << buffer;
+	lastReply = string(buffer, buffer + length);
 	return stoi(string(buffer, buffer + 3));
 }
 
@@ -209,35 +213,34 @@ void FtpClient::startClient()
 	}
 	if (this->loginToServer() == false)	
 		return;	
-
+	//this->enterPassiveMode();
 	this->dir("Hao");	
+	this->get("Hao/pic.png");	
+	this->put("C:/hahaha.txt");
 }
 
 /// <summary>
 /// Ham liet ke cac thu muc, tap tin tren server
-/// <summary>
+/// </summary>
 /// <param name = "path"> Duong dan can liet ke cac thu muc </param>
 void FtpClient::dir(const string & path)
 {
-	/*if (isPassive)
-		passiveMode();
-	else*/
-		activeMode();
+	openDataChannel();
 	sendCmd("NLST " + path);
 	int reply = recvReply();
 	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
 	{
 		string buffer = recvData();
 		reply = recvReply();
-		if (reply == 226 || reply == 250)
-			cout << buffer;
-	}
-	dataCleanUp();
+		if (reply == 226 || reply == 250)		
+			cout << buffer;							
+	}	
+	closeDataChannel();
 }
 
 /// <summary>
 /// Ham gui lenh den server
-/// <summary>
+/// </summary>
 /// <param name = "cmd"> Lenh can gui </param>
 void FtpClient::sendCmd(const string & cmd) const
 {	
@@ -262,9 +265,196 @@ string FtpClient::recvData() const
 		if (length == 0) // Server ngat socket, truyen du lieu xong.
 			break;
 		if (length == SOCKET_ERROR)
+		{
+			delete[] buffer;
 			throw SOCKET_ERROR;
+		}			
 		res += string(buffer, buffer + length);
 	} while (length > 0);
 	delete[] buffer;
 	return res;
+}
+
+/// <summary>
+/// Ham khoi tao ket noi den server theo che do passive
+/// </summary>
+void FtpClient::passiveMode()
+{	
+	sendCmd("PASV");
+	int reply = recvReply();
+	if (reply == 227) // 227 Entering Passive Mode (h1,h2,h3,h4,p1,p2).
+	{
+		sockData = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (sockData == INVALID_SOCKET)
+			throw INVALID_SOCKET;
+		sockaddr_in svDataAddr = getAddrFromPasvReply(); // Dia chi cong data cua server.
+		if (connect(sockData, (sockaddr*)&svDataAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den cong data.
+			throw SOCKET_ERROR;
+	}
+}
+
+/// <summary>
+/// Ham ngat ket noi duong truyen du lieu
+/// </summary>
+void FtpClient::closeDataChannel() const
+{
+	shutdown(sockData, SD_BOTH);
+}
+
+/// <summary>
+/// Ham lay dia chi tu phan hoi 227 cua lenh PASV
+/// </summary>
+sockaddr_in FtpClient::getAddrFromPasvReply() const
+{
+	if ((int)lastReply.size() < 3 || string(lastReply.begin(), lastReply.begin() + 3) != "227")
+		throw PASSIVE_REPLY_NOT_FOUND;
+	string tmp;
+	stringstream ss;
+	ss << lastReply;
+	// 227 Entering Passive Mode (h1,h2,h3,h4,p1,p2).
+	for (int i = 0; i < 5; i++)
+		ss >> tmp;
+	// tmp = (h1,h2,h3,h4,p1,p2)
+	uint8_t bytes[6] = {};
+	int n = 0, sum = 0;
+	for (int i = 0; i < (int)tmp.size(); i++) // Tach cac byte cua dia chi ra luu vao mang.
+		if (tmp[i] >= '0' && tmp[i] <= '9') // Chu so.
+			sum = sum * 10 + tmp[i] - '0';
+		else if (tmp[i] == ',' || tmp[i] == ')')
+		{
+			bytes[n++] = sum;
+			sum = 0;
+		}
+	sockaddr_in res;
+	res.sin_family = AF_INET;
+	uint32_t ip = 0;
+	for (int i = 3; i >= 0; i--)
+		ip = (ip << 8) + bytes[i];
+	res.sin_addr.S_un.S_addr = ip;
+	res.sin_port = (uint16_t(bytes[5]) << 8) + bytes[4]; // Port luu theo kieu big edian.
+	return res;
+}
+
+/// <summary>
+/// Khoi dong che do passive
+/// </summary>
+void FtpClient::enterPassiveMode()
+{
+isPassive = true;
+}
+
+/// <summary>
+/// Ham download file tu server
+/// </summary>
+/// <param name = "path"> Duong dan den file can download </param>
+void FtpClient::get(const string & path)
+{
+	openDataChannel();
+	sendCmd("RETR " + path);
+	int reply = recvReply();
+	if (reply == 125 || reply == 150)
+	{
+		ofstream os((localDir + '/' + getFileNameFromPath(path)).c_str(), ofstream::binary | ofstream::out);
+		recvData(os);
+		os.close();
+		reply = recvReply();
+	}
+	closeDataChannel();
+}
+
+/// <summary>
+/// Ham mo duong truyen du lieu
+/// </summary>
+void FtpClient::openDataChannel()
+{
+	if (isPassive)
+		passiveMode();
+	else
+		activeMode();
+}
+
+/// <summary>
+/// Ham nhan du lieu tu server va xuat ra output stream
+/// </summary>
+/// <param name = "os"> Output stream can xuat </param>
+void FtpClient::recvData(ofstream & os) const
+{
+	char * buffer = new char[MAX_BUFFER_SIZE];
+	int length;
+	do
+	{
+		length = recv(sockData, buffer, MAX_BUFFER_SIZE, 0);
+		if (length == 0) // Server ngat socket, truyen du lieu xong.
+			break;
+		if (length == SOCKET_ERROR)
+		{
+			delete[] buffer;
+			throw SOCKET_ERROR;
+		}
+		os.write(string(buffer, buffer + length).c_str(), length);
+	} while (length > 0);
+	delete[] buffer;
+}
+
+/// <summary>
+/// Ham lay ten file tu duong dan 
+/// </summary>
+/// <param name = "path"> Duong dan </param>
+/// <returns> Ten file lay tu duong dan </returns>
+string FtpClient::getFileNameFromPath(const string & path)
+{
+	string res;
+	for (int i = (int)path.size() - 1; i >= 0; i--)
+	{
+		if (path[i] == '/' || path[i] == '\\')
+			break;
+		res += path[i];
+	}
+	if (res.empty())
+		throw INVALID_PARAMETER;
+	reverse(res.begin(), res.end());
+	return res;
+}
+
+/// <summary>
+/// Ham gui file den server
+/// </summary>
+/// <param name = "path"> Duong dan den file can gui </param>
+void FtpClient::put(const string & path)
+{
+	ifstream is(path.c_str(), ifstream::binary | ifstream::in);
+	if (is.is_open() == false)
+		throw FILE_NOT_EXISTS;
+	openDataChannel();
+	sendCmd("STOR " + getFileNameFromPath(path));
+	int reply = recvReply();
+	if (reply == 125 || reply == 150)
+	{
+		sendData(is);
+		closeDataChannel(); // Dong ket noi de danh dau chuyen xong file.
+		reply = recvReply(); // Nhan reply 226.
+	}
+	is.close();	
+}
+
+/// <summary>
+/// Ham gui du lieu tu input stream den server
+/// </summmary>
+/// <param name = "is"> Input stream </param>
+void FtpClient::sendData(ifstream & is) const
+{
+	char * buffer = new char[MAX_BUFFER_SIZE];
+	while (is.eof() == false)
+	{
+		is.read(buffer, streamsize(MAX_BUFFER_SIZE));
+		int bufferSize = is.gcount(); // So luong ki tu doc duoc.
+		while(bufferSize > 0)
+		{
+			int length = send(sockData, buffer, bufferSize, 0);
+			if (length == SOCKET_ERROR)
+				throw SOCKET_ERROR;
+			bufferSize -= length;
+		}
+	}
+	delete[] buffer;
 }
