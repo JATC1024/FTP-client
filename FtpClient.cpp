@@ -738,3 +738,36 @@ void FtpClient::rmdir(const string &path)
 			fileName += list[i];
 	}
 }
+
+/// <summary>
+/// Ham upload nhieu file len server
+/// </summary>
+/// <param name = "path" Duong dan toi thu muc can upload file </param>
+void FtpClient::mput(const string &path)
+{
+	// Lay tat ca cac file trong thu muc
+	vector <string> fnames;
+	string search_path = path + "/*.*";
+	WIN32_FIND_DATA fd;
+	HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
+	if (hFind != INVALID_HANDLE_VALUE) {
+		do {
+			// read all (real) files in current folder
+			// , delete '!' read other 2 default folder . and ..
+			if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+				fnames.push_back(fd.cFileName);
+			}
+		} while (::FindNextFile(hFind, &fd));
+		::FindClose(hFind);
+	}
+
+	// Upload tung file trong thu muc
+	for (int i = 0; i < (int)fnames.size(); i++)
+	{
+		cout << "Put " + fnames[i] << "? (Y/N)\n";
+		char choice;
+		cin >> choice;
+		if (choice == 'Y')
+			put(fnames[i]);
+	}
+}
