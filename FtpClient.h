@@ -33,11 +33,11 @@ class FtpClient
 {
 private:
 	sockaddr_in svAddr; // Dia chi server.
-	int sockCmd; // Socket duong lenh.
+	SOCKET sockCmd; // Socket duong lenh.
 	sockaddr_in cmdAddr; // Dia chi cua socket duong lenh.
-	int sockData; // Socket duong du lieu.		
+	SOCKET sockData; // Socket duong du lieu.		
 	bool isPassive;
-	string localDir;
+	string localDir; // Dia chi mac dinh cua client;
 	string lastReply; // Luu lai reply cuoi cung nhan duoc tu server.
 private:		
 	// VIET MOT HAM sendCmd DUY NHAT CHO TAT CAC CAC LENH
@@ -66,7 +66,7 @@ private:
 	void passiveMode();
 
 	// Liet ke cac thu muc, tap tin trong thu muc hien hanh.
-	void list(const string &);
+	void ls(const string &);
 
 	// Lenh dir.
 	void dir(const string &);
@@ -126,7 +126,10 @@ private:
 	void sendData(ifstream &) const;
 
 	// Don dep tai nguyen.
-	void cleanUp();
+	void cleanUp();	
+
+	// Ham hien thi duong dan tai server.
+	void pwd();
 
 	static bool checkReply(const string &);
 public:
