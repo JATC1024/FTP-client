@@ -131,6 +131,8 @@ private:
 	// Ham hien thi duong dan tai server.
 	void pwd();
 
+	// Ham lay cac tap tin va thu muc.
+	string getDir(const string &);
 	static bool checkReply(const string &);
 public:
 	// Tao mot ftpclient moi. Tham so la dia chi IP cua ftp server.
