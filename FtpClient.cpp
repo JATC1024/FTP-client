@@ -12,7 +12,7 @@
 CWinApp theApp;
 using namespace std;
 
-int main()
+int main(int argc, char ** argv)
 {
 	int nRetCode = 0;
 
@@ -273,6 +273,10 @@ void FtpClient::startClient()
 			this->cd(parameter);
 		else if (cmd == "pwd")
 			this->pwd();
+		else if (cmd == "mget")
+			this->mget(parameter);
+		else if (cmd == "mdel")
+			this->mdel(parameter);
 		else
 		{
 			cout << "Unsupported command\n";			
@@ -287,18 +291,8 @@ void FtpClient::startClient()
 /// <param name = "path"> Duong dan can liet ke cac thu muc </param>
 void FtpClient::dir(const string & path)
 {
-	openDataChannel();
-	sendCmd("NLST " + path);
-	int reply = recvReply();
-
-	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
-	{
-		string buffer = recvData();
-		reply = recvReply();
-		if (reply == 226 || reply == 250)		
-			cout << buffer;
-		closeDataChannel();
-	}		
+	string res = getDir(path);
+	cout << res;	
 }
 
 /// <summary>
@@ -635,5 +629,83 @@ void FtpClient::ls(const string &path)
 		if (reply == 226 || reply == 250)
 			cout << buffer;
 		closeDataChannel();
+	}
+}
+
+/// <summary>
+/// Ham tai nhieu file tu server
+/// </summary>
+/// <param name = "path"> Duong dan den thu muc can tai file </param>
+void FtpClient::mget(const string & path)
+{
+	string list = getDir(path);	 // list = "abc.txt\r\nblablabla.txt\r\n"
+	string fileName;
+	for (int i = 0; i < (int)list.size(); i++)
+	{
+		if (list[i] == '\n')
+		{
+			fileName = "";
+			continue;
+		}		
+		if (list[i] == '\r')
+		{
+			cout << "Get " + fileName << "? (Y/N)\n";
+			char choice;
+			cin >> choice;			
+			if(choice == 'Y')
+				get(fileName);			
+		}			
+		else
+			fileName += list[i];
+	}
+}
+
+/// <summary>
+/// Ham lay cac tap tin trong thu muc hien hanh.
+/// </summary>
+/// <param name = "path"> Duong dan den thu muc hien hanh </param>
+/// <returns> Danh sach cac thu muc </returns>
+string FtpClient::getDir(const string & path)
+{
+	string res;
+	openDataChannel();
+	sendCmd("NLST " + path);
+	int reply = recvReply();
+	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
+	{
+		string buffer = recvData();
+		reply = recvReply();
+		if (reply == 226 || reply == 250)
+			res += buffer;
+		closeDataChannel();
+	}
+	return res;
+}
+
+/// <summary>
+/// Ham xoa nhieu file tu server
+/// </summary>
+/// <param name = "path"> Duong dan den thu muc can xoa cac file </param>
+void FtpClient::mdel(const string & path)
+{
+	string list = getDir(path);	 // list = "abc.txt\r\nblablabla.txt\r\n"
+	string fileName;
+	for (int i = 0; i < (int)list.size(); i++)
+	{
+		if (list[i] == '\n')
+		{
+			fileName = "";
+			continue;
+		}
+		if (list[i] == '\r')
+		{
+			cout << "Delete " + fileName << "? (Y/N)\n";
+			char choice;
+			cin >> choice;
+			if (choice == 'Y')
+				del(fileName);
+		}
+		else
+			fileName += list[i];
 	}
 }
