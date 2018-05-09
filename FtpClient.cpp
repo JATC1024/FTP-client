@@ -104,17 +104,22 @@ void FtpClient::initialize() const
 /// <param name = "serverIP"> Dia chi IP cua ftp server </param>
 /// <returns> True neu ket noi thanh cong, false nguoc lai </returns>
 bool FtpClient::connectToServer()
-{
-	//throw "Chua xu ly 120, FtpClient::connectToServer()";
+{	
 	sockCmd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao socket de ket noi toi ftp server.
-	if (sockCmd < 0) // Ko tao duoc socket.
+	if (sockCmd == INVALID_SOCKET) // Ko tao duoc socket.
 		throw INVALID_SOCKET;
 	if (connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.			
 		throw SOCKET_ERROR;
 	// Nhan reply tu ftp server.
 	int reply = recvReply();	
+	if (reply == 120)
+	{
+		int wait = (lastReply[21] - 48) * 100 + (lastReply[22] - 48) * 10 + lastReply[23] - 48;
+		Sleep(wait * 60 * 1000);
+		reply = recvReply();
+	}
 	if (reply == 220) // 220 Service ready for new user.
-		return true;
+		return true;	
 	return false;
 }
 
@@ -128,7 +133,10 @@ bool FtpClient::loginToServer()
 	cout << "Enter username: ";
 	cin >> userName;
 	sendCmd("USER " + userName);
-	int reply = recvReply();	
+	int reply = recvReply();
+	if (reply == 230)
+		return true;
+
 	cout << "Enter password: ";
 	cin >> passWord;	
 	sendCmd("PASS " + passWord); // Gui password.
@@ -215,7 +223,7 @@ void FtpClient::startClient()
 		cout << "Ftp client connectToServer failed\n";
 		return;
 	}
-	this->loginToServer();		
+	this->loginToServer();
 	do
 	{		
 		string userInput, cmd, parameter;
@@ -247,22 +255,43 @@ void FtpClient::startClient()
 }
 
 /// <summary>
-/// Ham liet ke cac thu muc, tap tin tren server
+/// Ham liet ke cac tap tin tren server
 /// </summary>
-/// <param name = "path"> Duong dan can liet ke cac thu muc </param>
+/// <param name = "path"> Duong dan can liet ke cac tap tin </param>
 void FtpClient::dir(const string & path)
 {
 	openDataChannel();
 	sendCmd("NLST " + path);
 	int reply = recvReply();
+
 	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
 	{
 		string buffer = recvData();
 		reply = recvReply();
 		if (reply == 226 || reply == 250)		
-			cout << buffer;							
-	}	
-	closeDataChannel();
+			cout << buffer;
+		closeDataChannel();
+	}		
+}
+
+/// <summary>
+/// Ham liet ke cac thu muc tren server
+/// </summary>
+/// <param name = "path"> Duong dan can liet ke cac thu muc </param>
+void FtpClient::ls(const string &path)
+{
+	openDataChannel();
+	sendCmd("LIST " + path);
+	int reply = recvReply();
+
+	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
+	{
+		string buffer = recvData();
+		reply = recvReply();
+		if (reply == 226 || reply == 250)
+			cout << buffer;
+		closeDataChannel();
+	}
 }
 
 /// <summary>
@@ -275,6 +304,16 @@ void FtpClient::sendCmd(const string & cmd) const
 	int length = send(sockCmd, ftpCmd.c_str(), ftpCmd.size(), 0);
 	if (length == SOCKET_ERROR)
 		throw SOCKET_ERROR;
+}
+
+/// <summary>
+/// Ham thay doi duong dan tren server
+/// </summary>
+/// <param name = "path"> Duong dan moi </param>
+void FtpClient::cd(const string &path)
+{
+	sendCmd("CWD " + path);
+	int reply = recvReply();
 }
 
 /// <summary>
@@ -393,6 +432,34 @@ void FtpClient::get(const string & path)
 }
 
 /// <summary>
+/// Ham xoa mot file tren server
+/// </summary>
+/// <param name = "path" Duong dan file can xoa </param>
+void FtpClient::del(const string &path)
+{
+	sendCmd("DELE " + path);
+	int reply = recvReply();
+}
+
+/// <summary>
+/// Ham tao mot thu muc tren server
+/// </summary>
+/// <param name = "path" Duong dan thu muc can tao tren server </param>
+void FtpClient::mkdir(const string &path)
+{
+	string namepath = getFileNameFromPath(path);
+	sendCmd("MKD " + namepath);
+	int reply = recvReply();
+}
+/// <summary>
+/// Hien thi duong dan tai server
+/// </summary>
+/// <param name = "" </param>
+void FtpClient::pwd()
+{
+	sendCmd("PWD");
+	int reply = recvReply();
+}
 /// Ham mo duong truyen du lieu
 /// </summary>
 void FtpClient::openDataChannel()
