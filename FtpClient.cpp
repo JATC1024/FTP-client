@@ -38,24 +38,19 @@ int main(int argc, char ** argv)
 			}
 			catch (int e)
 			{
-				if (e == INADDR_NONE)
+				if (e == INVALID_ADDRESS)
 				{
 					cout << "Ftp server IP address wrong format\n";
-					return 0;
-				}
-				else if (e == CONNECTION_CLOSED)
-				{
-					cout << "Connection closed\n";
-					return 0;
-				}
-				else if (e == UNABLE_TO_CREATE_SOCKET)
-				{
-					cout << "Could not create socket, please try again\n";
 					return 0;
 				}
 				else if (e == NOT_ENOUGH_ARG)
 				{
 					cout << "Not enough arguments\n";
+					return 0;
+				}				
+				else
+				{
+					cout << "Unknown error\n";
 					return 0;
 				}
 			}
@@ -82,7 +77,7 @@ FtpClient::FtpClient(const string & serverIP)
 	uint32_t ip;
 	ip = inet_addr(serverIP.c_str());
 	if (ip == INADDR_NONE)
-		throw INADDR_NONE;
+		throw INVALID_ADDRESS;
 	svAddr.sin_addr.S_un.S_addr = ip;
 	isPassive = false;
 	lcd("C:/FtpClient");
@@ -112,7 +107,8 @@ bool FtpClient::connectToServer()
 	sockCmd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao socket de ket noi toi ftp server.
 	if (sockCmd == INVALID_SOCKET) // Ko tao duoc socket.
 		throw INVALID_SOCKET;
-	if (connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.			
+	int t;
+	if (t = connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.			
 		throw SOCKET_ERROR;
 	// Nhan reply tu ftp server.
 	int reply = recvReply();
@@ -150,7 +146,9 @@ bool FtpClient::loginToServer()
 	{
 		string passWord;
 		cout << "Enter password: ";
+		SetStdinEcho(false);
 		cin >> passWord;
+		SetStdinEcho(true);
 		sendCmd("PASS " + passWord); // Gui password.		
 		reply = recvReply();
 	}
@@ -166,43 +164,46 @@ void FtpClient::activeMode()
 	if (getsockname(sockCmd, (sockaddr*)&cmdAddr, &size) == SOCKET_ERROR) // Lay dia chi cua command socket.
 		throw SOCKET_ERROR;
 
-
 	sockaddr_in service; // Dia chi cho data socket.
 	service.sin_family = AF_INET;
 	service.sin_port = 0; // Tu dong cap free port.
 	service.sin_addr = cmdAddr.sin_addr;
-	SOCKET listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao data socket.
+	listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao data socket.
 	if (listenSocket == INVALID_SOCKET) // Khong tao duoc socket.
 		throw INVALID_SOCKET;
 	if (bind(listenSocket, (sockaddr*)&service, sizeof(sockaddr)) == SOCKET_ERROR)
 		throw SOCKET_ERROR;
-	if (getsockname(listenSocket, (sockaddr*)&service, &size) == SOCKET_ERROR) // Lay dia chi cua data socket (lay port).
+	if (listen(listenSocket, MAX_PENDING_CONNECTION) == SOCKET_ERROR) // Lang nghe ket noi tu server.
 		throw SOCKET_ERROR;
 
 
+	if (getsockname(listenSocket, (sockaddr*)&service, &size) == SOCKET_ERROR) // Lay dia chi cua data socket (lay port).
+		throw SOCKET_ERROR;
 	int b1 = service.sin_addr.S_un.S_un_b.s_b1; // 4 byte cua ip address.
 	int b2 = service.sin_addr.S_un.S_un_b.s_b2;
 	int b3 = service.sin_addr.S_un.S_un_b.s_b3;
 	int b4 = service.sin_addr.S_un.S_un_b.s_b4;
 	int b5 = service.sin_port & 255; // 2 byte cua port.
 	int b6 = service.sin_port >> 8;
-	string address = to_string(b1) + "," + to_string(b2) + "," + to_string(b3) + "," + to_string(b4) + "," + to_string(b5) + "," + to_string(b6);
+	string address = to_string(b1) + "," + to_string(b2) + "," + to_string(b3) + "," + to_string(b4) + "," + to_string(b5) + "," + to_string(b6);	
 	sendCmd("PORT " + address); // Gui lenh PORT.
 	int reply = recvReply(); // Nhan phan hoi
 	if (reply != 200)
-		return;
-	cout << "ola 1\n";
-	if (listen(listenSocket, MAX_PENDING_CONNECTION) == SOCKET_ERROR) // Lang nghe ket noi tu server.
-		throw SOCKET_ERROR;
-	cout << "ola 2\n";
+		return;	
+}
+
+/// <summary>
+/// Ham accept connection tu server
+/// </summary>
+void FtpClient::accept_connection()
+{
+	sockaddr_in service;
 	do
 	{
-		cout << "ola 3\n";
-		size = sizeof(sockaddr);
+		int size = sizeof(sockaddr);
 		sockData = accept(listenSocket, (sockaddr*)&service, &size);
 		if (sockData == INVALID_SOCKET)
 			throw INVALID_SOCKET;
-		cout << "ola 4\n";
 	} while (service.sin_port != htons(20)); // Accept den khi gap port 20.
 	closesocket(listenSocket); // Khong can listen socket nua.
 }
@@ -237,18 +238,39 @@ int FtpClient::recvReply()
 	return stoi(string(lastReply.begin(), lastReply.begin() + 3));
 }
 
+/// <summary>
+/// Ham khoi dong ftp client
+/// </summary>
 void FtpClient::startClient()
 {
 	this->initialize();
-	if (this->connectToServer() == false)
+	try
 	{
-		cout << "Ftp client connectToServer failed\n";
+		if (this->connectToServer() == false)
+		{
+			cout << "Ftp client connectToServer failed\n";
+			return;
+		}
+		while (loginToServer() == false)
+		{
+			cout << "Exit? (Y/N)\n";
+			char cmd;
+			cin >> cmd;
+			if (cmd == 'Y')
+				return;
+			cout << "Please login to server:\n";
+		}
+	}	
+	catch(int e)
+	{
+		if (e == SOCKET_ERROR || e == INVALID_SOCKET)
+			printError();
+		else if (e == CONNECTION_CLOSED)
+			cout << "No connection\n";
+		else
+			throw e;
 		return;
-	}
-	while (loginToServer() == false)
-	{
-		cout << "Please login to server:\n";
-	}
+	}	
 	do
 	{
 		cout << "FtpClient> ";
@@ -261,39 +283,51 @@ void FtpClient::startClient()
 		ss << userInput;
 		ss >> cmd;
 		ss >> parameter;
-		if (cmd == "dir")
-			this->dir(parameter);
-		else if (cmd == "ls")
-			this->ls(parameter);
-		else if (cmd == "get")
-			this->get(parameter);
-		else if (cmd == "put")
-			this->put(parameter);
-		else if (cmd == "passive")
-			this->enterPassiveMode();
-		else if (cmd == "quit" || cmd == "exit")
-			break;
-		else if (cmd == "lcd")
-			this->lcd(parameter);
-		else if (cmd == "delete")
-			this->del(parameter);
-		else if (cmd == "mkdir")
-			this->mkdir(parameter);
-		else if (cmd == "cd")
-			this->cd(parameter);
-		else if (cmd == "pwd")
-			this->pwd();
-		else if (cmd == "mget")
-			this->mget(parameter);
-		else if (cmd == "mdel")
-			this->mdel(parameter);
-		else if (cmd == "rmdir")
-			this->rmdir(parameter);
-		else if (cmd == "mput")
-			this->mput(parameter);
-		else
+		try
 		{
-			cout << "Unsupported command\n";
+			if (cmd == "dir")
+				this->dir(parameter);
+			else if (cmd == "ls")
+				this->ls(parameter);
+			else if (cmd == "get")
+				this->get(parameter);
+			else if (cmd == "put")
+				this->put(parameter);
+			else if (cmd == "passive")
+				this->enterPassiveMode();
+			else if (cmd == "quit" || cmd == "exit")
+				break;
+			else if (cmd == "lcd")
+				this->lcd(parameter);
+			else if (cmd == "delete")
+				this->del(parameter);
+			else if (cmd == "mkdir")
+				this->mkdir(parameter);
+			else if (cmd == "cd")
+				this->cd(parameter);
+			else if (cmd == "pwd")
+				this->pwd();
+			else if (cmd == "mget")
+				this->mget(parameter);
+			else if (cmd == "mdel")
+				this->mdel(parameter);
+			else if (cmd == "rmdir")
+				this->rmdir(parameter);
+			else if (cmd == "mput")
+				this->mput(parameter);
+			else
+			{
+				cout << "Unsupported command\n";
+			}
+		}	
+		catch (int e)
+		{						
+			if (e == SOCKET_ERROR || e == INVALID_SOCKET)
+			{
+				printError();
+			}					
+			else 
+				throw e;
 		}
 	} while (true);
 	cleanUp();
@@ -303,11 +337,11 @@ void FtpClient::startClient()
 /// Ham liet ke cac thu muc, tap tin tren server
 /// </summary>
 /// <param name = "path"> Duong dan can liet ke cac thu muc </param>
-/*void FtpClient::dir(const string & path)
+void FtpClient::dir(const string & path)
 {
 	string res = getDir(path);
 	cout << res;
-}*/
+}
 
 /// <summary>
 /// Ham gui lenh den server
@@ -392,13 +426,13 @@ sockaddr_in FtpClient::getAddrFromPasvReply() const
 	uint8_t bytes[6] = {};
 	int n = 0, sum = 0;
 	for (int i = 0; i < (int)tmp.size(); i++) // Tach cac byte cua dia chi ra luu vao mang.
-	if (tmp[i] >= '0' && tmp[i] <= '9') // Chu so.
-		sum = sum * 10 + tmp[i] - '0';
-	else if (tmp[i] == ',' || tmp[i] == ')')
-	{
-		bytes[n++] = sum;
-		sum = 0;
-	}
+		if (tmp[i] >= '0' && tmp[i] <= '9') // Chu so.
+			sum = sum * 10 + tmp[i] - '0';
+		else if (tmp[i] == ',' || tmp[i] == ')')
+		{
+			bytes[n++] = sum;
+			sum = 0;
+		}
 	sockaddr_in res;
 	res.sin_family = AF_INET;
 	uint32_t ip = 0;
@@ -427,6 +461,8 @@ void FtpClient::get(const string & path)
 	openDataChannel();
 	sendCmd("RETR " + path);
 	int reply = recvReply();
+	if (!isPassive)
+		accept_connection();
 	if (reply == 125 || reply == 150)
 	{
 		ofstream os((localDir + '/' + getFileNameFromPath(path)).c_str(), ofstream::binary | ofstream::out);
@@ -498,7 +534,7 @@ string FtpClient::getFileNameFromPath(const string & path)
 /// <param name = "path"> Duong dan den file can gui </param>
 void FtpClient::put(const string & path)
 {
-	ifstream is(path.c_str(), ifstream::binary | ifstream::in);
+	ifstream is(localDir + '/' + path.c_str(), ifstream::binary | ifstream::in);
 	if (is.is_open() == false)
 	{
 		cout << "File does not exist\n";
@@ -507,6 +543,8 @@ void FtpClient::put(const string & path)
 	openDataChannel();
 	sendCmd("STOR " + getFileNameFromPath(path));
 	int reply = recvReply();
+	if (!isPassive)
+		accept_connection();
 	if (reply == 125 || reply == 150)
 	{
 		sendData(is);
@@ -565,8 +603,8 @@ bool FtpClient::checkReply(const string & reply)
 		return true;
 	// Reply nhieu dong.
 	for (int i = 0; i + 4 < (int)reply.size(); i++)
-	if (string(reply.begin() + i, reply.begin() + i + 4) == string(reply.begin(), reply.begin() + 3) + ' ')
-		return true;
+		if (string(reply.begin() + i, reply.begin() + i + 4) == string(reply.begin(), reply.begin() + 3) + ' ')
+			return true;
 	return false;
 }
 
@@ -577,7 +615,7 @@ bool FtpClient::checkReply(const string & reply)
 void FtpClient::lcd(const string & path)
 {
 	localDir = path;
-	if (CreateDirectory(localDir.c_str(), NULL) == true)
+	if (CreateDirectory(localDir.c_str(), NULL) == TRUE)
 		cout << "Directory changes successfuly\n";
 	else if (GetLastError() == ERROR_ALREADY_EXISTS)
 		cout << "Director already exists\n";
@@ -627,17 +665,6 @@ void FtpClient::mkdir(const string &path)
 }
 
 /// <summary>
-/// Ham liet ke cac thu muc, tap tin tren server
-/// </summary>
-/// <param name = "path"> Duong dan can liet ke cac thu muc </param>
-void FtpClient::dir(const string & path)
-{
-	string res = getDir(path);
-	cout << res;
-}
-
-
-/// <summary>
 /// Ham liet ke cac thu muc tren server
 /// </summary>
 /// <param name = "path"> Duong dan can liet ke cac thu muc </param>
@@ -646,7 +673,7 @@ void FtpClient::ls(const string &path)
 	openDataChannel();
 	sendCmd("LIST " + path);
 	int reply = recvReply();
-
+	if (!isPassive) accept_connection();
 	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
 	{
 		string buffer = recvData();
@@ -655,37 +682,6 @@ void FtpClient::ls(const string &path)
 			cout << buffer;
 		closeDataChannel();
 	}
-}
-
-/// <summary>
-/// Ham lay cac tap tin trong duong dan thu muc hien hanh.
-/// </summary>
-/// <param name = "path"> Duong dan den thu muc hien hanh </param>
-/// <returns> Danh sach cac thu muc </returns>
-vector<string> FtpClient::createVectorFile(const string & path)
-{
-	vector<string> fnames;
-	stringstream ss;
-	ss << path;
-	while (!ss.eof())
-	{
-		string fileName;
-		ss >> fileName;					// Tach ten file
-		fnames.push_back(fileName);		// Dua ten file vao danh sach
-		if (fileName[0] == '"')			// Ten file co dang dac biet (dau cach, ...)
-		{
-			while (1)					// Lap den luc tim duoc dau "
-			{
-				ss >> fileName;
-				fnames.back() += fileName;
-				if (fileName.back() == '"') break;
-			}
-			fnames.back().erase(0);
-			fnames.back().erase(fnames.back().back());
-		}
-	}
-
-	return fnames;
 }
 
 /// <summary>
@@ -702,6 +698,31 @@ void FtpClient::mget(const string & path)
 	{
 		get(fnames[i]);
 	}
+}
+
+
+/// <summary>
+/// Ham lay cac tap tin trong thu muc hien hanh.
+/// </summary>
+/// <param name = "path"> Duong dan den thu muc hien hanh </param>
+/// <returns> Danh sach cac thu muc </returns>
+string FtpClient::getDir(const string & path)
+{
+	string res;
+	openDataChannel();
+	sendCmd("NLST " + path);
+	int reply = recvReply();
+	if (!isPassive)
+		accept_connection();
+	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
+	{
+		string buffer = recvData();
+		reply = recvReply();
+		if (reply == 226 || reply == 250)
+			res += buffer;
+		closeDataChannel();
+	}
+	return res;
 }
 
 /// <summary>
@@ -737,28 +758,6 @@ void FtpClient::mput(const string &path)
 }
 
 /// <summary>
-/// Ham lay cac tap tin trong thu muc hien hanh.
-/// </summary>
-/// <param name = "path"> Duong dan den thu muc hien hanh </param>
-/// <returns> Danh sach cac thu muc </returns>
-string FtpClient::getDir(const string & path)
-{
-	string res;
-	openDataChannel();
-	sendCmd("NLST " + path);
-	int reply = recvReply();
-	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
-	{
-		string buffer = recvData();
-		reply = recvReply();
-		if (reply == 226 || reply == 250)
-			res += buffer;
-		closeDataChannel();
-	}
-	return res;
-}
-
-/// <summary>
 /// Ham xoa thu muc rong tren server
 /// </summary>
 /// <param name = "path" Duong dan thu muc can tim xoa </param>
@@ -787,4 +786,96 @@ void FtpClient::rmdir(const string &path)
 		else
 			fileName += list[i];
 	}
+}
+
+/// <summary>
+/// Ham bao loi socket
+/// </summary>
+void FtpClient::printError() const
+{
+	int lastErr = WSAGetLastError();
+	switch (lastErr)
+	{
+	case WSAENETDOWN:
+		cout << "The network subsystem has failed\n";
+		break;
+	case WSAECONNREFUSED:
+		cout << "The server refuses to connect\n";
+		break;
+	case WSAENETUNREACH:
+		cout << "Cannot reach the network at this time\n";
+		break;
+	case WSAETIMEDOUT:
+		cout << "Connect timed out\n";
+		break;
+	case WSAEMFILE:
+		cout << "No more socket descriptors are available\n";
+		break;
+	case WSAECONNABORTED:
+		cout << "The virtual circuit was terminated due to a time-out or other failure\n";
+		break;	
+	case WSAEINVALIDPROVIDER:
+		cout << "The service provider returned a version other than 2.2\n";
+		break;
+	case WSAEPROVIDERFAILEDINIT:
+		cout << "The service provider failed to initialize\n";
+		break;
+	}
+}
+
+/// <summary>
+/// Ham lay cac tap tin trong duong dan thu muc hien hanh.
+/// </summary>
+/// <param name = "path"> Duong dan den thu muc hien hanh </param>
+/// <returns> Danh sach cac thu muc </returns>
+vector<string> FtpClient::createVectorFile(const string & path) const
+{
+	vector<string> fnames;
+	stringstream ss;
+	ss << path;
+	while (!ss.eof())
+	{
+		string fileName;
+		ss >> fileName;					// Tach ten file
+		fnames.push_back(fileName);		// Dua ten file vao danh sach
+		if (fileName[0] == '"')			// Ten file co dang dac biet (dau cach, ...)
+		{
+			while (1)					// Lap den luc tim duoc dau "
+			{
+				ss >> fileName;
+				fnames.back() += fileName;
+				if (fileName.back() == '"') break;
+			}
+			fnames.back().erase(0);
+			fnames.back().erase(fnames.back().back());
+		}
+	}
+
+	return fnames;
+}
+
+void SetStdinEcho(bool enable)
+{
+#ifdef WIN32
+	HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+	DWORD mode;
+	GetConsoleMode(hStdin, &mode);
+
+	if (!enable)
+		mode &= ~ENABLE_ECHO_INPUT;
+	else
+		mode |= ENABLE_ECHO_INPUT;
+
+	SetConsoleMode(hStdin, mode);
+
+#else
+	struct termios tty;
+	tcgetattr(STDIN_FILENO, &tty);
+	if (!enable)
+		tty.c_lflag &= ~ECHO;
+	else
+		tty.c_lflag |= ECHO;
+
+	(void)tcsetattr(STDIN_FILENO, TCSANOW, &tty);
+#endif
 }
