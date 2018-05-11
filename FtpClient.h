@@ -2,13 +2,7 @@
 
 #include "resource.h"
 #ifndef MAX_REPLY_LENGTH
-#define MAX_REPLY_LENGTH 10000
-#endif
-#ifndef CONNECTION_CLOSED
-#define CONNECTION_CLOSED -1
-#endif
-#ifndef UNABLE_TO_CREATE_SOCKET
-#define UNABLE_TO_CREATE_SOCKET -3
+#define MAX_REPLY_LENGTH 1000
 #endif
 #ifndef MAX_PENDING_CONNECTION
 #define MAX_PENDING_CONNECTION 5
@@ -19,14 +13,14 @@
 #ifndef PASSIVE_REPLY_NOT_FOUND
 #define PASSIVE_REPLY_NOT_FOUND -2
 #endif
-#ifndef DIR_ERROR
-#define DIR_ERROR -4
+#ifndef CONNECTION_CLOSED
+#define CONNECTION_CLOSED -3
 #endif
-#ifndef INVALID_PARAMETER
-#define INVALID_PARAMETER -5
+#ifndef NOT_ENOUGH_ARG
+#define NOT_ENOUGH_ARG -4
 #endif
-#ifndef FILE_NOT_EXISTS
-#define FILE_NOT_EXISTS -6
+#ifndef INVALID_ADDRESS
+#define INVALID_ADDRESS -5
 #endif
 using namespace std;
 class FtpClient
@@ -35,11 +29,12 @@ private:
 	sockaddr_in svAddr; // Dia chi server.
 	SOCKET sockCmd; // Socket duong lenh.
 	sockaddr_in cmdAddr; // Dia chi cua socket duong lenh.
-	SOCKET sockData; // Socket duong du lieu.		
+	SOCKET sockData; // Socket duong du lieu.	
+	SOCKET listenSocket;
 	bool isPassive;
 	string localDir; // Dia chi mac dinh cua client;
 	string lastReply; // Luu lai reply cuoi cung nhan duoc tu server.
-private:		
+private:
 	// VIET MOT HAM sendCmd DUY NHAT CHO TAT CAC CAC LENH
 	// Vi du muon gui lenh USER thi sendCmd("USER balbalbal")
 	void sendCmd(const string &) const;
@@ -48,19 +43,22 @@ private:
 	int recvReply();
 
 	// Nhan du lieu tu server.
-	string recvData() const;	
+	string recvData() const;
 
 	// Khoi tao winsock.
-	void initialize() const; 
+	void initialize() const;
 
 	// Ket noi den server. Tra ve true neu thanh cong, nguoc lai false.
-	bool connectToServer();	
+	bool connectToServer();
 
 	// Dang nhap den server, username va password do nguoi dung nhap. Tra ve true neu thanh cong, nguoc lai false.
 	bool loginToServer();
 
 	// Khoi tao sockData theo che do active.
 	void activeMode();
+
+	// Phan tiep theo cua activeMode()
+	void accept_connection();
 
 	// Khoi tao sockData theo che do passvice.
 	void passiveMode();
@@ -126,7 +124,7 @@ private:
 	void sendData(ifstream &) const;
 
 	// Don dep tai nguyen.
-	void cleanUp();	
+	void cleanUp();
 
 	// Ham hien thi duong dan tai server.
 	void pwd();
@@ -134,10 +132,18 @@ private:
 	// Ham lay cac tap tin va thu muc.
 	string getDir(const string &);
 	static bool checkReply(const string &);
+
+	// Ham xuat loi socket.
+	void printError() const;
+
+	/// Ham lay cac tap tin trong duong dan thu muc hien hanh.
+	vector<string> createVectorFile(const string &) const;
 public:
 	// Tao mot ftpclient moi. Tham so la dia chi IP cua ftp server.
 	FtpClient(const string&);
-	
+
 	// Chay client.
 	void startClient();
 };
+
+void SetStdinEcho(bool);
