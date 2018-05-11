@@ -31,11 +31,11 @@ int main(int argc, char ** argv)
 		{
 			// TODO: code your application's behavior here.
 			try
-			{			
+			{
 				if (argc < 2) throw NOT_ENOUGH_ARG;
 				FtpClient client(argv[1]);
-				client.startClient();				
-			}			
+				client.startClient();
+			}
 			catch (int e)
 			{
 				if (e == INADDR_NONE)
@@ -85,7 +85,7 @@ FtpClient::FtpClient(const string & serverIP)
 		throw INADDR_NONE;
 	svAddr.sin_addr.S_un.S_addr = ip;
 	isPassive = false;
-	lcd("C:/FtpClient");	
+	lcd("C:/FtpClient");
 }
 
 /// <summary>
@@ -99,7 +99,7 @@ void FtpClient::initialize() const
 	wVersionRequested = MAKEWORD(2, 2); // Version 2.2 https://msdn.microsoft.com/en-us/library/windows/desktop/ms742213(v=vs.85).aspx.
 	int err = WSAStartup(wVersionRequested, &wsaData);
 	if (err)
-		throw err;	
+		throw err;
 }
 
 /// <summary>
@@ -108,14 +108,14 @@ void FtpClient::initialize() const
 /// <param name = "serverIP"> Dia chi IP cua ftp server </param>
 /// <returns> True neu ket noi thanh cong, false nguoc lai </returns>
 bool FtpClient::connectToServer()
-{	
+{
 	sockCmd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao socket de ket noi toi ftp server.
 	if (sockCmd == INVALID_SOCKET) // Ko tao duoc socket.
 		throw INVALID_SOCKET;
 	if (connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.			
 		throw SOCKET_ERROR;
 	// Nhan reply tu ftp server.
-	int reply = recvReply();	
+	int reply = recvReply();
 	if (reply == 120)
 	{
 		int wait = (lastReply[21] - 48) * 100 + (lastReply[22] - 48) * 10 + lastReply[23] - 48;
@@ -123,7 +123,7 @@ bool FtpClient::connectToServer()
 		reply = recvReply();
 	}
 	if (reply == 220) // 220 Service ready for new user.
-		return true;	
+		return true;
 	return false;
 }
 
@@ -153,7 +153,7 @@ bool FtpClient::loginToServer()
 		cin >> passWord;
 		sendCmd("PASS " + passWord); // Gui password.		
 		reply = recvReply();
-	}	
+	}
 	return reply == 230;
 }
 
@@ -177,7 +177,7 @@ void FtpClient::activeMode()
 	if (bind(listenSocket, (sockaddr*)&service, sizeof(sockaddr)) == SOCKET_ERROR)
 		throw SOCKET_ERROR;
 	if (getsockname(listenSocket, (sockaddr*)&service, &size) == SOCKET_ERROR) // Lay dia chi cua data socket (lay port).
-		throw SOCKET_ERROR;	
+		throw SOCKET_ERROR;
 
 
 	int b1 = service.sin_addr.S_un.S_un_b.s_b1; // 4 byte cua ip address.
@@ -215,15 +215,15 @@ void FtpClient::activeMode()
 int FtpClient::recvReply()
 {
 	char * buffer = new char[MAX_REPLY_LENGTH];
-	lastReply = "";	
+	lastReply = "";
 	do
 	{
-		int length = recv(sockCmd, buffer, MAX_REPLY_LENGTH, 0);		
-		if (length == 0) 
+		int length = recv(sockCmd, buffer, MAX_REPLY_LENGTH, 0);
+		if (length == 0)
 		{
 			delete[] buffer;
-			throw CONNECTION_CLOSED;			
-		}			
+			throw CONNECTION_CLOSED;
+		}
 		if (length == SOCKET_ERROR)
 		{
 			delete[] buffer;
@@ -250,10 +250,10 @@ void FtpClient::startClient()
 		cout << "Please login to server:\n";
 	}
 	do
-	{		
+	{
 		cout << "FtpClient> ";
 		string userInput, cmd, parameter;
-		stringstream ss;		
+		stringstream ss;
 		do
 		{
 			getline(cin, userInput);
@@ -293,9 +293,9 @@ void FtpClient::startClient()
 			this->mput(parameter);
 		else
 		{
-			cout << "Unsupported command\n";			
-		}			
-	} while (true);		
+			cout << "Unsupported command\n";
+		}
+	} while (true);
 	cleanUp();
 }
 
@@ -303,18 +303,18 @@ void FtpClient::startClient()
 /// Ham liet ke cac thu muc, tap tin tren server
 /// </summary>
 /// <param name = "path"> Duong dan can liet ke cac thu muc </param>
-void FtpClient::dir(const string & path)
+/*void FtpClient::dir(const string & path)
 {
 	string res = getDir(path);
-	cout << res;	
-}
+	cout << res;
+}*/
 
 /// <summary>
 /// Ham gui lenh den server
 /// </summary>
 /// <param name = "cmd"> Lenh can gui </param>
 void FtpClient::sendCmd(const string & cmd) const
-{	
+{
 	string ftpCmd = cmd + "\r\n";
 	int length = send(sockCmd, ftpCmd.c_str(), ftpCmd.size(), 0);
 	if (length == SOCKET_ERROR)
@@ -339,7 +339,7 @@ string FtpClient::recvData() const
 		{
 			delete[] buffer;
 			throw SOCKET_ERROR;
-		}			
+		}
 		res += string(buffer, buffer + length);
 	} while (length > 0);
 	delete[] buffer;
@@ -350,7 +350,7 @@ string FtpClient::recvData() const
 /// Ham khoi tao ket noi den server theo che do passive
 /// </summary>
 void FtpClient::passiveMode()
-{	
+{
 	sendCmd("PASV");
 	int reply = recvReply();
 	if (reply == 227) // 227 Entering Passive Mode (h1,h2,h3,h4,p1,p2).
@@ -392,13 +392,13 @@ sockaddr_in FtpClient::getAddrFromPasvReply() const
 	uint8_t bytes[6] = {};
 	int n = 0, sum = 0;
 	for (int i = 0; i < (int)tmp.size(); i++) // Tach cac byte cua dia chi ra luu vao mang.
-		if (tmp[i] >= '0' && tmp[i] <= '9') // Chu so.
-			sum = sum * 10 + tmp[i] - '0';
-		else if (tmp[i] == ',' || tmp[i] == ')')
-		{
-			bytes[n++] = sum;
-			sum = 0;
-		}
+	if (tmp[i] >= '0' && tmp[i] <= '9') // Chu so.
+		sum = sum * 10 + tmp[i] - '0';
+	else if (tmp[i] == ',' || tmp[i] == ')')
+	{
+		bytes[n++] = sum;
+		sum = 0;
+	}
 	sockaddr_in res;
 	res.sin_family = AF_INET;
 	uint32_t ip = 0;
@@ -430,14 +430,14 @@ void FtpClient::get(const string & path)
 	if (reply == 125 || reply == 150)
 	{
 		ofstream os((localDir + '/' + getFileNameFromPath(path)).c_str(), ofstream::binary | ofstream::out);
-		if (os.is_open() == false)		
+		if (os.is_open() == false)
 			cout << "Local folder not found\n";
-		else		
+		else
 			recvData(os);
 		os.close();
 		reply = recvReply();
-		closeDataChannel();			
-	}	
+		closeDataChannel();
+	}
 }
 
 /// <summary>
@@ -487,7 +487,7 @@ string FtpClient::getFileNameFromPath(const string & path)
 		if (path[i] == '/' || path[i] == '\\')
 			break;
 		res += path[i];
-	}	
+	}
 	reverse(res.begin(), res.end());
 	return res;
 }
@@ -503,7 +503,7 @@ void FtpClient::put(const string & path)
 	{
 		cout << "File does not exist\n";
 		return;
-	}		
+	}
 	openDataChannel();
 	sendCmd("STOR " + getFileNameFromPath(path));
 	int reply = recvReply();
@@ -513,7 +513,7 @@ void FtpClient::put(const string & path)
 		closeDataChannel(); // Dong ket noi de danh dau chuyen xong file.
 		reply = recvReply(); // Nhan reply 226.
 	}
-	is.close();	
+	is.close();
 }
 
 /// <summary>
@@ -527,14 +527,14 @@ void FtpClient::sendData(ifstream & is) const
 	{
 		is.read(buffer, streamsize(MAX_BUFFER_SIZE));
 		int bufferSize = int(is.gcount()); // So luong ki tu doc duoc.
-		while(bufferSize > 0)
+		while (bufferSize > 0)
 		{
 			int length = send(sockData, buffer, bufferSize, 0);
 			if (length == SOCKET_ERROR)
 			{
 				delete[] buffer;
 				throw SOCKET_ERROR;
-			}				
+			}
 			bufferSize -= length;
 		}
 	}
@@ -565,8 +565,8 @@ bool FtpClient::checkReply(const string & reply)
 		return true;
 	// Reply nhieu dong.
 	for (int i = 0; i + 4 < (int)reply.size(); i++)
-		if (string(reply.begin() + i, reply.begin() + i + 4) == string(reply.begin(), reply.begin() + 3) + ' ')
-			return true;
+	if (string(reply.begin() + i, reply.begin() + i + 4) == string(reply.begin(), reply.begin() + 3) + ' ')
+		return true;
 	return false;
 }
 
@@ -627,6 +627,17 @@ void FtpClient::mkdir(const string &path)
 }
 
 /// <summary>
+/// Ham liet ke cac thu muc, tap tin tren server
+/// </summary>
+/// <param name = "path"> Duong dan can liet ke cac thu muc </param>
+void FtpClient::dir(const string & path)
+{
+	string res = getDir(path);
+	cout << res;
+}
+
+
+/// <summary>
 /// Ham liet ke cac thu muc tren server
 /// </summary>
 /// <param name = "path"> Duong dan can liet ke cac thu muc </param>
@@ -647,30 +658,81 @@ void FtpClient::ls(const string &path)
 }
 
 /// <summary>
+/// Ham lay cac tap tin trong duong dan thu muc hien hanh.
+/// </summary>
+/// <param name = "path"> Duong dan den thu muc hien hanh </param>
+/// <returns> Danh sach cac thu muc </returns>
+vector<string> FtpClient::createVectorFile(const string & path)
+{
+	vector<string> fnames;
+	stringstream ss;
+	ss << path;
+	while (!ss.eof())
+	{
+		string fileName;
+		ss >> fileName;					// Tach ten file
+		fnames.push_back(fileName);		// Dua ten file vao danh sach
+		if (fileName[0] == '"')			// Ten file co dang dac biet (dau cach, ...)
+		{
+			while (1)					// Lap den luc tim duoc dau "
+			{
+				ss >> fileName;
+				fnames.back() += fileName;
+				if (fileName.back() == '"') break;
+			}
+			fnames.back().erase(0);
+			fnames.back().erase(fnames.back().back());
+		}
+	}
+
+	return fnames;
+}
+
+/// <summary>
 /// Ham tai nhieu file tu server
 /// </summary>
-/// <param name = "path"> Duong dan den thu muc can tai file </param>
+/// <param name = "path"> Duong dan den cac thu muc can tai file </param>
 void FtpClient::mget(const string & path)
 {
-	string list = getDir(path);	 // list = "abc.txt\r\nblablabla.txt\r\n"
-	string fileName;
-	for (int i = 0; i < (int)list.size(); i++)
+	// Tao danh sach file
+	vector <string> fnames = createVectorFile(path);
+
+	// Download tung file
+	for (int i = 0; i < (int)fnames.size(); i++)
 	{
-		if (list[i] == '\n')
-		{
-			fileName = "";
-			continue;
-		}		
-		if (list[i] == '\r')
-		{
-			cout << "Get " + fileName << "? (Y/N)\n";
-			char choice;
-			cin >> choice;			
-			if(choice == 'Y')
-				get(fileName);			
-		}			
-		else
-			fileName += list[i];
+		get(fnames[i]);
+	}
+}
+
+/// <summary>
+/// Ham xoa nhieu file tu server
+/// </summary>
+/// <param name = "path"> Duong dan den cac file can xoa </param>
+void FtpClient::mdel(const string & path)
+{
+	// Tao danh sach file
+	vector <string> fnames = createVectorFile(path);
+
+	// Xoa tung file
+	for (int i = 0; i < (int)fnames.size(); i++)
+	{
+		del(fnames[i]);
+	}
+}
+
+/// <summary>
+/// Ham upload nhieu file len server
+/// </summary>
+/// <param name = "path" Duong dan toi thu muc can upload file </param>
+void FtpClient::mput(const string &path)
+{
+	// Tao danh sach file
+	vector <string> fnames = createVectorFile(path);
+
+	// Upload tung file
+	for (int i = 0; i < (int)fnames.size(); i++)
+	{
+		put(fnames[i]);
 	}
 }
 
@@ -697,67 +759,6 @@ string FtpClient::getDir(const string & path)
 }
 
 /// <summary>
-/// Ham xoa nhieu file tu server
-/// </summary>
-/// <param name = "path"> Duong dan den thu muc can xoa cac file </param>
-void FtpClient::mdel(const string & path)
-{
-	string list = getDir(path);	 // list = "abc.txt\r\nblablabla.txt\r\n"
-	string fileName;
-	for (int i = 0; i < (int)list.size(); i++)
-	{
-		if (list[i] == '\n')
-		{
-			fileName = "";
-			continue;
-		}
-		if (list[i] == '\r')
-		{
-			cout << "Delete " + fileName << "? (Y/N)\n";
-			char choice;
-			cin >> choice;
-			if (choice == 'Y')
-				del(fileName);
-		}
-		else
-			fileName += list[i];
-	}
-}
-
-/// <summary>
-/// Ham upload nhieu file len server
-/// </summary>
-/// <param name = "path" Duong dan toi thu muc can upload file </param>
-void FtpClient::mput(const string &path)
-{	
-	// Lay tat ca cac file trong thu muc
-	/*vector <string> fnames;
-	string search_path = path + "/*.*";
-	WIN32_FIND_DATA fd;
-	HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
-	if (hFind != INVALID_HANDLE_VALUE) {
-		do {
-			// read all (real) files in current folder
-			// , delete '!' read other 2 default folder . and ..
-			if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-				fnames.push_back(fd.cFileName);
-			}
-		} while (::FindNextFile(hFind, &fd));
-		::FindClose(hFind);
-	}
-
-	// Upload tung file trong thu muc
-	for (int i = 0; i < (int)fnames.size(); i++)
-	{
-		cout << "Put " + fnames[i] << "? (Y/N)\n";
-		char choice;
-		cin >> choice;
-		if (choice == 'Y')
-			put(fnames[i]);
-	}*/
-}
-
-/// <summary>
 /// Ham xoa thu muc rong tren server
 /// </summary>
 /// <param name = "path" Duong dan thu muc can tim xoa </param>
@@ -777,7 +778,7 @@ void FtpClient::rmdir(const string &path)
 			string pathFileName = path + fileName;
 			WIN32_FIND_DATA fd;
 			HANDLE hFind = ::FindFirstFile(pathFileName.c_str(), &fd);
-			if (hFind == INVALID_HANDLE_VALUE) 
+			if (hFind == INVALID_HANDLE_VALUE)
 			{
 				sendCmd("RMD " + fileName);
 				int reply = recvReply();
