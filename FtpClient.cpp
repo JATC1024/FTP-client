@@ -205,7 +205,7 @@ bool FtpClient::activeMode()
 void FtpClient::accept_connection()
 {
 	sockaddr_in service;
-	do
+	while (true)
 	{
 		int size = sizeof(sockaddr);
 		sockData = accept(listenSocket, (sockaddr*)&service, &size);
@@ -214,7 +214,9 @@ void FtpClient::accept_connection()
 			closesocket(listenSocket);
 			throw INVALID_SOCKET;
 		}
-	} while (service.sin_port != htons(20)); // Accept den khi gap port 20.
+		if (service.sin_port == htons(20)) break;	// Accept den khi gap port 20.
+		closeDataChannel();		// Close data socket truoc khi accept cai khac
+	}  
 	closesocket(listenSocket); // Khong can listen socket nua.
 }
 
