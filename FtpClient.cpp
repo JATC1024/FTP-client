@@ -38,7 +38,10 @@ int main(int argc, char ** argv)
 			}
 			catch (int e)
 			{
-				FtpClient::printError(e);
+				if (e == NOT_ENOUGH_ARG)
+					cout << "Error: Not enough arguments\n";
+				else
+					FtpClient::printError(e);
 			}
 		}
 	}
@@ -93,20 +96,28 @@ bool FtpClient::connectToServer()
 	sockCmd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao socket de ket noi toi ftp server.
 	if (sockCmd == INVALID_SOCKET) // Ko tao duoc socket.
 		throw INVALID_SOCKET;
-	int t;
-	if (t = connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.			
-		throw SOCKET_ERROR;
-	// Nhan reply tu ftp server.
-	int reply = recvReply();
-	if (reply == 120)
-	{
-		int wait = (lastReply[21] - 48) * 100 + (lastReply[22] - 48) * 10 + lastReply[23] - 48;
-		Sleep(wait * 60 * 1000);
-		reply = recvReply();
+	
+	try {	// Sau khi da tao duoc socket, neu co loi thi CleanUp() truoc khi thoat
+		int t;
+		if (t = connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.			
+			throw SOCKET_ERROR;
+		// Nhan reply tu ftp server.
+		int reply = recvReply();
+		if (reply == 120)
+		{
+			int wait = (lastReply[21] - 48) * 100 + (lastReply[22] - 48) * 10 + lastReply[23] - 48;
+			Sleep(wait * 60 * 1000);
+			reply = recvReply();
+		}
+		if (reply == 220) // 220 Service ready for new user.
+			return true;
+		return false;
 	}
-	if (reply == 220) // 220 Service ready for new user.
-		return true;
-	return false;
+	catch (int e)
+	{
+		cleanUp();
+		throw e;
+	}
 }
 
 /// <summary>
@@ -157,30 +168,26 @@ bool FtpClient::activeMode()
 	listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao data socket.
 	if (listenSocket == INVALID_SOCKET) // Khong tao duoc socket.
 		throw INVALID_SOCKET;
-	if (bind(listenSocket, (sockaddr*)&service, size) == SOCKET_ERROR)
-		throw SOCKET_ERROR;
-	if (listen(listenSocket, MAX_PENDING_CONNECTION) == SOCKET_ERROR) // Lang nghe ket noi tu server.
-		throw SOCKET_ERROR;
-	/// Neu xay ra bat ky loi gi, khong listen nua
-	if (getsockname(listenSocket, (sockaddr*)&service, &size) == SOCKET_ERROR) // Lay dia chi cua data socket (lay port).
-	{
-		closesocket(listenSocket);
-		throw SOCKET_ERROR;
-	}
-	int b1 = service.sin_addr.S_un.S_un_b.s_b1; // 4 byte cua ip address.
-	int b2 = service.sin_addr.S_un.S_un_b.s_b2;
-	int b3 = service.sin_addr.S_un.S_un_b.s_b3;
-	int b4 = service.sin_addr.S_un.S_un_b.s_b4;
-	int b5 = service.sin_port & 255; // 2 byte cua port.
-	int b6 = service.sin_port >> 8;
-	string address = to_string(b1) + "," + to_string(b2) + "," + to_string(b3) + "," + to_string(b4) + "," + to_string(b5) + "," + to_string(b6);
-	try
-	{
+	try {	// Sau khi tao listen socket, neu gap loi thi close sokcet truoc khi thoat
+		if (bind(listenSocket, (sockaddr*)&service, size) == SOCKET_ERROR)
+			throw SOCKET_ERROR;
+		if (listen(listenSocket, MAX_PENDING_CONNECTION) == SOCKET_ERROR) // Lang nghe ket noi tu server.
+			throw SOCKET_ERROR;
+		if (getsockname(listenSocket, (sockaddr*)&service, &size) == SOCKET_ERROR) // Lay dia chi cua data socket (lay port).
+			throw SOCKET_ERROR;
+		int b1 = service.sin_addr.S_un.S_un_b.s_b1; // 4 byte cua ip address.
+		int b2 = service.sin_addr.S_un.S_un_b.s_b2;
+		int b3 = service.sin_addr.S_un.S_un_b.s_b3;
+		int b4 = service.sin_addr.S_un.S_un_b.s_b4;
+		int b5 = service.sin_port & 255; // 2 byte cua port.
+		int b6 = service.sin_port >> 8;
+		string address = to_string(b1) + "," + to_string(b2) + "," + to_string(b3) + "," + to_string(b4) + "," + to_string(b5) + "," + to_string(b6);
+
 		sendCmd("PORT " + address); // Gui lenh PORT.
 		int reply = recvReply();
 		if (reply != 200)
 		{
-			closesocket(listenSocket); // Neu bi loi thi khong listen nua
+			closesocket(listenSocket); // Neu server bao loi thi khong listen nua
 			return false;
 		}
 		return true;
@@ -246,13 +253,14 @@ int FtpClient::recvReply()
 /// </summary>
 void FtpClient::startClient()
 {
-	try {
-		this->initialize();
-		if (this->connectToServer() == false)
-		{
-			cout << "Ftp client connectToServer failed\n";
-			return;
-		}
+	this->initialize();
+	// CleanUp() tu dong duoc goi trong connectToServer() truoc khi throw
+	if (this->connectToServer() == false)
+	{
+		cout << "Ftp client connectToServer failed\n";
+		return;
+	}
+	try {	// Sau khi tao command socket, neu co loi thi cleanUp() truoc khi thoat
 		while (loginToServer() == false)
 		{
 			cout << "Exit? (Y/N)\n";
@@ -262,8 +270,15 @@ void FtpClient::startClient()
 				return;
 			cout << "Please login to server:\n";
 		}
-		do
-		{
+	}	
+	catch (int e)
+	{
+		this->cleanUp();
+		throw e;
+	}
+	while (true)
+	{
+		try {
 			cout << "FtpClient> ";
 			string userInput, cmd, parameter;
 			stringstream ss;
@@ -309,13 +324,11 @@ void FtpClient::startClient()
 			{
 				cout << "Unsupported command\n";
 			}
-
-		} while (true);
-	}
-	catch (int e)
-	{
-		this->cleanUp();
-		throw e;
+		}
+		catch (int e)
+		{
+			printError(e);
+		}
 	}
 	this->cleanUp();
 }
@@ -457,7 +470,7 @@ void FtpClient::get(const string & path)
 {
 	if (!openDataChannel()) return;
 	int reply;
-	try
+	try		
 	{
 		sendCmd("RETR " + path);
 		reply = recvReply();
@@ -479,7 +492,7 @@ void FtpClient::get(const string & path)
 			return;
 		}
 		try {
-			recvData(os);
+			recvData(os);	// Tu dong close file neu throw
 			os.close();
 			reply = recvReply();
 		}
@@ -572,7 +585,7 @@ void FtpClient::put(const string & path)
 		accept_connection();
 	if (reply == 125 || reply == 150) try
 	{
-		try { sendData(is); }
+		try { sendData(is); }	// Close data socket truoc khi thoat, neu gap loi
 		catch (int e)
 		{
 			closeDataChannel();
@@ -583,7 +596,7 @@ void FtpClient::put(const string & path)
 	}
 	catch (int e)
 	{
-		is.close();
+		is.close();	// Close file truoc khi throw
 		throw e;
 	}
 	is.close();
@@ -720,7 +733,7 @@ void FtpClient::ls(const string &path)
 	if (!isPassive) accept_connection();
 	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
 	{
-		try
+		try		// Neu gap loi thi close data soket truoc khi thoat
 		{
 			string buffer = recvData();
 			reply = recvReply();
@@ -896,8 +909,6 @@ void FtpClient::printError(int e)
 	}
 	else if (e == CONNECTION_CLOSED)
 		cout << "Error: No connection\n";
-	else if (e == NOT_ENOUGH_ARG)
-		cout << "Error: Not enough arguments\n";
 	else if (e == PASSIVE_REPLY_NOT_FOUND)
 		cout << "Error: Can not receive passive reply\n";
 	else
