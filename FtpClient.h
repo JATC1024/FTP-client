@@ -2,7 +2,7 @@
 
 #include "resource.h"
 #ifndef MAX_REPLY_LENGTH
-#define MAX_REPLY_LENGTH 1000
+#define MAX_REPLY_LENGTH 100
 #endif
 #ifndef MAX_PENDING_CONNECTION
 #define MAX_PENDING_CONNECTION 5
@@ -22,6 +22,9 @@
 #ifndef INVALID_ADDRESS
 #define INVALID_ADDRESS -5
 #endif
+#ifndef TIME_OUT
+#define TIME_OUT 5
+#endif
 using namespace std;
 class FtpClient
 {
@@ -31,9 +34,12 @@ private:
 	sockaddr_in cmdAddr; // Dia chi cua socket duong lenh.
 	SOCKET sockData; // Socket duong du lieu.	
 	SOCKET listenSocket;
-	bool isPassive;
 	string localDir; // Dia chi mac dinh cua client;
 	string lastReply; // Luu lai reply cuoi cung nhan duoc tu server.
+	bool isPassive;	
+	bool accepted = false;
+	thread acceptThread;
+	thread keyPressedThread;
 private:
 	// VIET MOT HAM sendCmd DUY NHAT CHO TAT CAC CAC LENH
 	// Vi du muon gui lenh USER thi sendCmd("USER balbalbal")
@@ -55,13 +61,10 @@ private:
 	bool loginToServer();
 
 	// Khoi tao sockData theo che do active.
-	void activeMode();
-
-	// Phan tiep theo cua activeMode()
-	void accept_connection();
+	bool activeMode();
 
 	// Khoi tao sockData theo che do passvice.
-	void passiveMode();
+	bool passiveMode();
 
 	// Liet ke cac thu muc, tap tin trong thu muc hien hanh.
 	void ls(const string &);
@@ -76,10 +79,10 @@ private:
 	void get(const string &);
 
 	// Upload nhieu file len server. Can ban chi tiet hon.
-	void mput(const string &);
+	void mput(const vector<string> &);
 
 	// Download nhieu file tu server. Can ban chi tiet hon.
-	void mget(const string &);
+	void mget(const vector<string> &);
 
 	// Thay doi duong dan tren server. Tham so la dia chi duong dan moi.
 	void cd(const string &);
@@ -91,7 +94,7 @@ private:
 	void del(const string &);
 
 	// Xoa nhieu file tren server. Can ban chi tien hon
-	void mdel(const string &);
+	void mdel(const vector<string> &);
 
 	// Tao thu muc tren server. Tham so la duong dan cua thu muc sau khi duoc tao.
 	void mkdir(const string &);
@@ -109,7 +112,7 @@ private:
 	void quit();
 
 	// Mo duong truyen du lieu.
-	void openDataChannel();
+	bool openDataChannel();
 
 	// Dong ket noi data socket.
 	void closeDataChannel() const;
@@ -133,17 +136,24 @@ private:
 	string getDir(const string &);
 	static bool checkReply(const string &);
 
-	// Ham xuat loi socket.
-	void printError() const;
-
 	/// Ham lay cac tap tin trong duong dan thu muc hien hanh.
-	vector<string> createVectorFile(const string &) const;
+	//vector<string> createVectorFile(const string &) const;
+
+	vector<string> getCmdAndParameter(const string &) const;
+
+	void keyPressedEvent(bool *);
 public:
 	// Tao mot ftpclient moi. Tham so la dia chi IP cua ftp server.
 	FtpClient(const string&);
 
 	// Chay client.
 	void startClient();
+
+	// Ham xuat loi phat sinh do exception
+	static void printError(int);
+
+	// Phan tiep theo cua activeMode()
+	void accept_connection();
 };
 
 void SetStdinEcho(bool);
