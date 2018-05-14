@@ -11,6 +11,7 @@
 
 CWinApp theApp;
 using namespace std;
+int FtpClient::lastErr = 0;
 
 int main(int argc, char ** argv)
 {
@@ -95,12 +96,12 @@ bool FtpClient::connectToServer()
 {
 	sockCmd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao socket de ket noi toi ftp server.
 	if (sockCmd == INVALID_SOCKET) // Ko tao duoc socket.
-		throw INVALID_SOCKET;
+		throwException(INVALID_SOCKET);
 
 	//try {	// Sau khi da tao duoc socket, neu co loi thi CleanUp() truoc khi thoat
 	int t;
-	if (t = connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.			
-		throw SOCKET_ERROR;
+	if (t = connect(sockCmd, (sockaddr*)&svAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den ftp server va kiem tra xem ket noi thanh cong hay that bai.				
+		throwException(SOCKET_ERROR);
 	// Nhan reply tu ftp server.
 	int reply = recvReply();
 	if (reply == 120)
@@ -160,7 +161,7 @@ bool FtpClient::activeMode()
 {
 	int size = sizeof(sockaddr);
 	if (getsockname(sockCmd, (sockaddr*)&cmdAddr, &size) == SOCKET_ERROR) // Lay dia chi cua command socket.
-		throw SOCKET_ERROR;
+		throwException(SOCKET_ERROR);
 
 	sockaddr_in service; // Dia chi cho data socket.
 	service.sin_family = AF_INET;
@@ -168,15 +169,15 @@ bool FtpClient::activeMode()
 	service.sin_addr = cmdAddr.sin_addr;
 	listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); // Tao data socket.
 	if (listenSocket == INVALID_SOCKET) // Khong tao duoc socket.
-		throw INVALID_SOCKET;
+		throwException(SOCKET_ERROR);
 	try {	// Sau khi tao listen socket, neu gap loi thi close sokcet truoc khi thoat
 		if (::bind(listenSocket, (sockaddr*)&service, size) == SOCKET_ERROR)
-			throw SOCKET_ERROR;
+			throwException(SOCKET_ERROR);
 		if (listen(listenSocket, MAX_PENDING_CONNECTION) == SOCKET_ERROR) // Lang nghe ket noi tu server.
-			throw SOCKET_ERROR;
+			throwException(SOCKET_ERROR);
 		acceptThread = thread(&FtpClient::accept_connection, this);
 		if (getsockname(listenSocket, (sockaddr*)&service, &size) == SOCKET_ERROR) // Lay dia chi cua data socket (lay port).
-			throw SOCKET_ERROR;
+			throwException(SOCKET_ERROR);
 		int b1 = service.sin_addr.S_un.S_un_b.s_b1; // 4 byte cua ip address.
 		int b2 = service.sin_addr.S_un.S_un_b.s_b2;
 		int b3 = service.sin_addr.S_un.S_un_b.s_b3;
@@ -189,6 +190,7 @@ bool FtpClient::activeMode()
 		int reply = recvReply();
 		if (reply != 200)
 		{
+			acceptThread.detach();
 			closesocket(listenSocket); // Neu server bao loi thi khong listen nua
 			return false;
 		}
@@ -196,7 +198,8 @@ bool FtpClient::activeMode()
 	}
 	catch (int e)
 	{
-		closesocket(listenSocket);
+		acceptThread.detach();		
+		closesocket(listenSocket);		
 		throw e;
 	}
 }
@@ -214,10 +217,17 @@ void FtpClient::accept_connection()
 		if (sockData == INVALID_SOCKET)
 		{
 			closesocket(listenSocket);
-			throw INVALID_SOCKET;
+			return;
 		}
 		if (service.sin_port == htons(20)) break;	// Accept den khi gap port 20.
-		closeDataChannel();		// Close data socket truoc khi accept cai khac
+		try
+		{
+			closeDataChannel();		// Close data socket truoc khi accept cai khac
+		}		
+		catch (int e)
+		{
+			return;
+		}
 	}
 	closesocket(listenSocket); // Khong can listen socket nua.
 	accepted = true;
@@ -237,13 +247,13 @@ int FtpClient::recvReply()
 		int length = recv(sockCmd, buffer, MAX_REPLY_LENGTH, 0);
 		if (length == 0)
 		{
-			delete[] buffer;
+			delete[] buffer;			
 			throw CONNECTION_CLOSED;
 		}
 		if (length == SOCKET_ERROR)
 		{
-			delete[] buffer;
-			throw SOCKET_ERROR;
+			delete[] buffer;			
+			throwException(SOCKET_ERROR);
 		}
 		buffer[length] = '\0';
 		cout << buffer;
@@ -355,7 +365,7 @@ void FtpClient::sendCmd(const string & cmd) const
 	string ftpCmd = cmd + "\r\n";
 	int length = send(sockCmd, ftpCmd.c_str(), ftpCmd.size(), 0);
 	if (length == SOCKET_ERROR)
-		throw SOCKET_ERROR;
+		throwException(SOCKET_ERROR);
 }
 
 /// <summary>
@@ -375,7 +385,7 @@ string FtpClient::recvData() const
 		if (length == SOCKET_ERROR)
 		{
 			delete[] buffer;
-			throw SOCKET_ERROR;
+			throwException(SOCKET_ERROR);
 		}
 		res += string(buffer, buffer + length);
 	} while (length > 0);
@@ -394,12 +404,12 @@ bool FtpClient::passiveMode()
 	{
 		sockData = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (sockData == INVALID_SOCKET)
-			throw INVALID_SOCKET;
+			throwException(INVALID_SOCKET);
 		// Socket da duoc tao, neu co loi gi thi close truoc khi thoat
 		try {
 			sockaddr_in svDataAddr = getAddrFromPasvReply(); // Dia chi cong data cua server.
 			if (connect(sockData, (sockaddr*)&svDataAddr, sizeof(sockaddr)) == SOCKET_ERROR) // Ket noi den cong data.
-				throw SOCKET_ERROR;
+				throwException(SOCKET_ERROR);
 			return true;
 		}
 		catch (int e)
@@ -417,9 +427,9 @@ bool FtpClient::passiveMode()
 void FtpClient::closeDataChannel() const
 {
 	if (shutdown(sockData, SD_BOTH) == SOCKET_ERROR)
-		throw SOCKET_ERROR;
+		throwException(SOCKET_ERROR);
 	if (closesocket(sockData) == SOCKET_ERROR)
-		throw SOCKET_ERROR;
+		throwException(SOCKET_ERROR);
 }
 
 /// <summary>
@@ -482,9 +492,7 @@ void FtpClient::get(const string & path)
 	{
 		if (isPassive) closeDataChannel();
 		throw e;
-	}
-	if (!isPassive)
-		accept_connection();
+	}	
 	if (reply == 125 || reply == 150)
 	{
 		ofstream os((localDir + '/' + getFileNameFromPath(path)).c_str(), ofstream::binary | ofstream::out);
@@ -494,6 +502,15 @@ void FtpClient::get(const string & path)
 			closeDataChannel();
 			return;
 		}
+		if (reply == 150 && !isPassive)
+		{
+			cout << "Waiting for server to connect...\n";
+			if (acceptDataChannel() == false)
+			{
+				reply = recvReply(); // 425
+				return;
+			}
+		}		
 		try {
 			recvData(os);	// Tu dong close file neu throw
 			os.close();
@@ -536,7 +553,7 @@ void FtpClient::recvData(ofstream & os) const
 		{
 			delete[] buffer;
 			os.close();
-			throw SOCKET_ERROR;
+			throwException(SOCKET_ERROR);
 		}
 		os.write(string(buffer, buffer + length).c_str(), length);
 	} while (length > 0);
@@ -583,11 +600,17 @@ void FtpClient::put(const string & path)
 	{
 		if (isPassive) closeDataChannel();
 		throw e;
-	}
-	if (!isPassive)
-		accept_connection();
+	}	
 	if (reply == 125 || reply == 150) try
 	{
+		if (reply == 150 && !isPassive) // Active mode.
+		{
+			cout << "Waiting for server to connect...\n";
+			if (acceptDataChannel() == false)
+			{
+				reply = recvReply();
+			}
+		}		
 		try { sendData(is); }	// Close data socket truoc khi thoat, neu gap loi
 		catch (int e)
 		{
@@ -622,7 +645,7 @@ void FtpClient::sendData(ifstream & is) const
 			if (length == SOCKET_ERROR)
 			{
 				delete[] buffer;
-				throw SOCKET_ERROR;
+				throwException(SOCKET_ERROR);
 			}
 			bufferSize -= length;
 		}
@@ -723,8 +746,8 @@ void FtpClient::mkdir(const string &path)
 /// </summary>
 /// <param name = "path"> Duong dan can liet ke cac thu muc </param>
 void FtpClient::ls(const string &path)
-{
-	if (!openDataChannel()) return;
+{	
+	if (!openDataChannel()) return;	
 	int reply;
 	try {
 		sendCmd("LIST " + path);
@@ -741,23 +764,10 @@ void FtpClient::ls(const string &path)
 		{
 			if (reply == 150 && !isPassive)
 			{
-				cout << "Waiting for server to connect...\n";
-				int beginTime = clock();
-				bool timeOut = false;
-				while (!accepted)
+				cout << "Waiting for server to connect...\n";				
+				if (acceptDataChannel() == false) // Kiem tra accept co bi time out.
 				{
-					int time = (clock() - beginTime) / CLOCKS_PER_SEC;
-					if (time >= TIME_OUT)
-					{
-						timeOut = true;
-						break;
-					}						
-				}
-				accepted = false;				
-				acceptThread.detach();
-				if (timeOut)
-				{
-					reply = recvReply();
+					reply = recvReply(); // 425 couldn't open data channel.
 					return;
 				}
 			}
@@ -807,11 +817,18 @@ string FtpClient::getDir(const string & path)
 	{
 		if (isPassive) closeDataChannel();
 		throw e;
-	}
-	if (!isPassive)
-		accept_connection();
+	}	
 	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
 	{
+		if (reply == 150 && !isPassive) // Active mode.
+		{
+			cout << "Waiting for server to connect...\n";
+			if (acceptDataChannel() == false) // Kiem tra accept co bi time out hay ko.
+			{
+				reply = recvReply(); // 425
+				return "";
+			}
+		}
 		try {
 			string buffer = recvData();
 			reply = recvReply();
@@ -893,9 +910,8 @@ void FtpClient::printError(int e)
 	if (e == INVALID_ADDRESS)
 		cout << "Error: Ftp server IP address wrong format\n";
 	else if (e == SOCKET_ERROR || e == INVALID_SOCKET)
-	{
-		int lastErr = WSAGetLastError();
-		switch (lastErr)
+	{		
+		switch (FtpClient::lastErr)
 		{
 		case WSAENETDOWN:
 			cout << "The network subsystem has failed\n";
@@ -1040,10 +1056,31 @@ vector<string> FtpClient::getCmdAndParameter(const string & userInput) const
 	return res;
 }
 
-void FtpClient::keyPressedEvent(bool * flag)
+/// <summary>
+/// Ham kiem tra thread accept co bi time out hay khong
+/// </summary>
+/// <returns> True neu accept thanh cong </returns>
+bool FtpClient::acceptDataChannel()
 {
-	*flag = false;
-	char tmp = cin.get();
-	accepted = true;
-	*flag = true;
+	int beginTime = clock();
+	bool timeOut = false;
+	while (!accepted) // Thread accept dang chay.
+	{
+		int time = (clock() - beginTime) / CLOCKS_PER_SEC;
+		if (time >= TIME_OUT)
+		{
+			timeOut = true; // Time out.
+			break;
+		}
+	}
+	accepted = false;
+	acceptThread.detach();
+	return !timeOut;
+}
+
+void FtpClient::throwException(int e)
+{
+	if (e == SOCKET_ERROR || e == INVALID_SOCKET)
+		FtpClient::lastErr = WSAGetLastError();
+	throw e;
 }
