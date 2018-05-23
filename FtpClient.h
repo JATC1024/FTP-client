@@ -2,7 +2,7 @@
 
 #include "resource.h"
 #ifndef MAX_REPLY_LENGTH
-#define MAX_REPLY_LENGTH 100
+#define MAX_REPLY_LENGTH 1
 #endif
 #ifndef MAX_PENDING_CONNECTION
 #define MAX_PENDING_CONNECTION 5
@@ -39,7 +39,7 @@ private:
 	bool isPassive;	
 	bool accepted = false;
 	thread acceptThread;
-	static int lastErr;
+	static int lastErr;	
 private:
 	// VIET MOT HAM sendCmd DUY NHAT CHO TAT CAC CAC LENH
 	// Vi du muon gui lenh USER thi sendCmd("USER balbalbal")
