@@ -519,17 +519,17 @@ void FtpClient::get(const string & path)
 			}
 			return;
 		}
-		if (reply == 150 && !isPassive)
+		if (!isPassive)
 		{
 			cout << "Waiting for server to connect...\n";
 			if (acceptDataChannel() == false)
 			{
-				reply = recvReply(); // 425
+				try { reply = recvReply(); } // 425
+				catch (int e) { os.close(); throw e; }
+				os.close();
 				return;
 			}
-		}
-		else if (!isPassive)
-			acceptThread.detach(); // 125 thi phai detach.
+		}		
 		try {
 			recvData(os);	// Tu dong close file neu throw
 			os.close();
@@ -544,9 +544,16 @@ void FtpClient::get(const string & path)
 	}
 	else
 	{
-		closesocket(listenSocket);
-		acceptThread.detach();
-	}		
+		if (isPassive)
+			closeDataChannel();
+		else
+		{
+			closesocket(listenSocket);
+			acceptThread.detach();
+			if (accepted)
+				closeDataChannel();
+		}		
+	}
 }
 
 /// <summary>
@@ -614,28 +621,31 @@ void FtpClient::put(const string & path)
 		cout << "File does not exist\n";
 		return;
 	}
-	if (!openDataChannel()) return;
-	int reply;
 	try {
-		sendCmd("STOR " + getFileNameFromPath(path));
-		reply = recvReply();
-	}
-	catch (int e)
-	{
-		if (isPassive) closeDataChannel();
-		else {
-			if (accepted) 
-				closeDataChannel();
-			acceptThread.detach();
-			closesocket(listenSocket);
-		}
-		throw e;
-	}
-	if (reply == 125 || reply == 150)
-	{
-		try
+		if (!openDataChannel())
 		{
-			if (reply == 150 && !isPassive) // Active mode.
+			is.close();
+			return;
+		}
+		int reply;
+		try {
+			sendCmd("STOR " + getFileNameFromPath(path));
+			reply = recvReply();
+		}
+		catch (int e)
+		{
+			if (isPassive) closeDataChannel();
+			else {
+				if (accepted)
+					closeDataChannel();
+				acceptThread.detach();
+				closesocket(listenSocket);
+			}
+			throw e;
+		}
+		if (reply == 125 || reply == 150)
+		{			
+			if (!isPassive) // Active mode.
 			{
 				cout << "Waiting for server to connect...\n";
 				if (acceptDataChannel() == false)
@@ -643,8 +653,6 @@ void FtpClient::put(const string & path)
 					reply = recvReply();
 				}
 			}
-			else if (!isPassive)
-				acceptThread.detach(); // 125 thi phai detach.
 			try { sendData(is); }	// Close data socket truoc khi thoat, neu gap loi
 			catch (int e)
 			{
@@ -652,19 +660,26 @@ void FtpClient::put(const string & path)
 				throw e;
 			}
 			closeDataChannel(); // Dong ket noi de danh dau chuyen xong file.
-			reply = recvReply(); // Nhan reply 226.
+			reply = recvReply(); // Nhan reply 226.			
 		}
-		catch (int e)
+		else
 		{
-			is.close();	// Close file truoc khi throw
-			throw e;
+			if (isPassive)
+				closeDataChannel();
+			else
+			{
+				closesocket(listenSocket);
+				acceptThread.detach();
+				if (accepted)
+					closeDataChannel();
+			}
 		}
 	}
-	else
+	catch (int e)
 	{
-		closesocket(listenSocket);
-		acceptThread.detach();
-	}	
+		is.close();
+		throw e;
+	}
 	is.close();
 }
 
@@ -808,7 +823,7 @@ void FtpClient::ls(const string &path)
 
 	if (reply == 125 || reply == 150)
 	{
-		if (reply == 150 && !isPassive)
+		if (!isPassive)
 		{
 			cout << "Waiting for server to connect...\n";
 			if (acceptDataChannel() == false) // Kiem tra accept co bi time out.
@@ -816,9 +831,7 @@ void FtpClient::ls(const string &path)
 				reply = recvReply(); // 425 couldn't open data channel.
 				return;
 			}
-		}
-		else if (!isPassive)
-			acceptThread.detach(); // 125 thi phai detach.
+		}		
 		try {
 			string buffer = recvData();
 			reply = recvReply();
@@ -834,8 +847,15 @@ void FtpClient::ls(const string &path)
 	}
 	else
 	{
-		closesocket(listenSocket);
-		acceptThread.detach();
+		if (isPassive)
+			closeDataChannel();
+		else
+		{
+			closesocket(listenSocket);
+			acceptThread.detach();
+			if (accepted)
+				closeDataChannel();
+		}
 	}
 }
 
@@ -880,7 +900,7 @@ string FtpClient::getDir(const string & path)
 	}
 	if (reply == 125 || reply == 150) // Bat dau nhan du lieu.
 	{
-		if (reply == 150 && !isPassive) // Active mode.
+		if (!isPassive) // Active mode.
 		{
 			cout << "Waiting for server to connect...\n";
 			if (acceptDataChannel() == false) // Kiem tra accept co bi time out hay ko.
@@ -888,9 +908,7 @@ string FtpClient::getDir(const string & path)
 				reply = recvReply(); // 425
 				return "";
 			}
-		}
-		else if(!isPassive)
-			acceptThread.detach(); // 125 thi phai detach.
+		}		
 		try {
 			string buffer = recvData();
 			reply = recvReply();
@@ -906,8 +924,15 @@ string FtpClient::getDir(const string & path)
 	}
 	else
 	{
-		closesocket(listenSocket);
-		acceptThread.detach();
+		if (isPassive)
+			closeDataChannel();
+		else
+		{
+			closesocket(listenSocket);
+			acceptThread.detach();
+			if (accepted)
+				closeDataChannel();
+		}
 	}
 	return res;
 }
